@@ -63,9 +63,9 @@ def extract_features(path_to_folder='.'):
         curDir = os.path.join(os.getcwd(), path, folder)
         for (i,filename) in enumerate(os.listdir(curDir)):
             path_to_file = os.path.join(curDir,filename)
-            try:
-                [rate,sig] = audioBasicIO.readAudioFile(path_to_file)
-            except:
+            #print path_to_file
+            [rate,sig] = audioBasicIO.readAudioFile(path_to_file)
+            if (rate == -1 and sig == -1):
                 #convert to wav
                 #command = "ffmpeg -i {}".format(path_to_file)
                 extension = os.path.splitext(filename)[-1]
@@ -74,7 +74,6 @@ def extract_features(path_to_folder='.'):
                 os.system(command)
                 [rate,sig] = audioBasicIO.readAudioFile(new_file)
                 os.system('rm {}'.format(path_to_file))     #remove old file not in *.wav format
-            #print sig.shape
             if sig.ndim >= 2:           #merge multichannels into mono channel
                 sig = np.mean(sig,axis=1)
 #            (rate,sig) = wav.read(path_to_file)
