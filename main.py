@@ -25,9 +25,10 @@ from sklearn.model_selection import train_test_split
 from datetime import datetime
 
 path = 'train'
-model_name= 'model_' + datetime.strftime(datetime.now(), "%Y_%m_%d_%H_%M")
-#print model_name
-#sys.exit()
+if not os.path.exists('model'):
+    os.mkdir('model')
+#model_name= 'model/' + datetime.strftime(datetime.now(), "%Y_%m_%d_%H_%M")
+model_name = 'model/2018_08_16_09_14'
 
 def convert_to_wav(path_to_folder):
     for folder in sorted(os.listdir(path_to_folder)):
@@ -58,6 +59,7 @@ def get_mfcc_feature(path_to_folder='.'):
     max_cepstrum = np.zeros(13)
     min_cepstrum = np.zeros(13)
     maxlen = 0
+    
     list_folders = sorted(os.listdir(path_to_folder))
     list_folders = [folder for folder in list_folders if "pkl" not in folder and 'zip' not in folder]
     for (order, folder) in enumerate(list_folders):
@@ -80,7 +82,7 @@ def get_mfcc_feature(path_to_folder='.'):
             #mfcc_data= np.swapaxes(mfcc_feat, 0 ,1)
             #cax = plt.imshow(mfcc_data, interpolation='nearest', cmap=cm.coolwarm, origin='lower')
             #plt.show() 
-            
+           
             maxlen = max(maxlen, mfcc_feat.shape[0])        #find max time-length
             
             max_current_mfcc = np.max(mfcc_feat, axis = 0)
@@ -102,7 +104,7 @@ def get_mfcc_feature(path_to_folder='.'):
         
 def normalize_data(dataset, min_cepstrum, max_cepstrum):
     diff = max_cepstrum - min_cepstrum
-    if isinstance(dataset, dict):
+    if isinstance(dataset[0], dict):
         for data in dataset:
             data['feature'] = (data['feature'] - min_cepstrum) / diff    #(x-min)/(max-min)
     else:
@@ -111,7 +113,7 @@ def normalize_data(dataset, min_cepstrum, max_cepstrum):
     return dataset
 
 def get_same_length_data(dataset, maxlen):
-    if isinstance(dataset, dict):
+    if isinstance(dataset[0], dict):
         for data in dataset:
             if data['feature'].shape[0] < maxlen:           #padding data
                 data['feature'] = np.pad(data['feature'], [(0,maxlen - len(data['feature'])),(0,0)], mode='constant', constant_values=0)
@@ -141,6 +143,7 @@ def split_data(training_set):
 
 def model(training_set, maxlen, use_dropout = True):
     X_train, Y_train_gender, Y_train_accent, X_test, Y_test_gender, Y_test_accent =  split_data(training_set)
+    cPickle.dump([X_test, Y_test_gender, Y_test_accent], open('validation.pkl','wb'),-1)
     print 'Split data'
     print 'number of training set', len(X_train)
     print 'number of validation set', len(X_test)
@@ -148,7 +151,7 @@ def model(training_set, maxlen, use_dropout = True):
 #    lstm1 = LSTM(16, return_sequences=True)(inputs)
 #    lstm1_flatten = Flatten()(lstm1)
 #    dense1 = Dense(32, activation='relu')(lstm1_flatten)
-    lstm1 = LSTM(128)(inputs)
+    lstm1 = LSTM(32)(inputs)
     dense1_gender = Dense(64, activation='relu')(lstm1)
     dense2_gender = Dense(32, activation='relu')(dense1_gender)
     output_gender = Dense(2, activation='softmax')(dense2_gender)
@@ -172,7 +175,7 @@ def model(training_set, maxlen, use_dropout = True):
     
     #model.fit(X_train, Y_train_gender, batch_size=10, verbose=1, epochs=3)
     model.fit(X_train, [Y_train_gender, Y_train_accent], validation_data=(X_test, [Y_test_gender, Y_test_accent]), \
-              batch_size=32, verbose=1)
+              batch_size=128, verbose=1, epochs=1)
 
     # serialize model to JSON
     model_json = model.to_json()
@@ -188,21 +191,41 @@ def get_new_max_length(dataset):
     maxlen = int(np.percentile(l, 75) + 1.5 * iqr)       #set new max length for audio since the longest is over 200K
     return maxlen
 
+def test_model():
+    X_test, Y_test_gender, Y_test_accent = cPickle.load(open('validation.pkl','rb'))
+    print 'X_test', len(X_test)
+    json_file = open(model_name + '.json', 'r')
+    loaded_model_json = json_file.read()
+    json_file.close()
+    loaded_model = model_from_json(loaded_model_json)
+    # load weights into new model
+    loaded_model.load_weights(model_name + ".h5")
+    # labels = loaded_model.predict(X_test)
+    # gender_pred = np.argmax(labels[0], axis = 1)
+    # accent_pred = np.argmax(labels[1], axis = 1)
+    # print gender_pred
+    # print accent_pred
+    loaded_model.compile(loss = 'categorical_crossentropy', optimizer='adam', metrics = ['accuracy'])
+    acc = loaded_model.evaluate(X_test, [Y_test_gender, Y_test_accent], batch_size=128)
+    #print('Test score:', score)
+    print('Test accuracy:', acc)
+    
 if __name__ == "__main__":
     #convert_to_wav(path)
-    training_set, maxlen, max_cepstrum, min_cepstrum = get_mfcc_feature(path)
-    print 'number of training samples', len(training_set)
-#    print maxlen
-#    print max_cepstrum
-#    print min_cepstrum
-    training_set = normalize_data(training_set, min_cepstrum=min_cepstrum, max_cepstrum=max_cepstrum)
-    maxlen = get_new_max_length(training_set)
-    print 'new max length for padding', maxlen
-    training_set = get_same_length_data(training_set, maxlen=maxlen)
+#     training_set, maxlen, max_cepstrum, min_cepstrum = get_mfcc_feature(path)
+#     print 'number of training samples', len(training_set)
+# #    print maxlen
+# #    print max_cepstrum
+# #    print min_cepstrum
+#     training_set = normalize_data(training_set, min_cepstrum=min_cepstrum, max_cepstrum=max_cepstrum)
+#     maxlen = get_new_max_length(training_set)
+#     print 'new max length for padding', maxlen
+#     training_set = get_same_length_data(training_set, maxlen=maxlen)
     
-#    for data in training_set:
-#        assert data['feature'].shape[0] == maxlen
-    model(training_set, maxlen)
+# #    for data in training_set:
+# #        assert data['feature'].shape[0] == maxlen
+#     model(training_set, maxlen)
+    test_model()
     #print training_set[0:2]['gender']
 
 

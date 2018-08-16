@@ -21,7 +21,7 @@ from keras.preprocessing.sequence import pad_sequences
 import cPickle
 
 from main import normalize_data, get_same_length_data, get_new_max_length
-model_name = ''
+model_name = 'model_2018_08_15_17_22'
 
 def get_mfcc_feature(path):
     print 'extract feature of test set'
@@ -64,6 +64,7 @@ def predict_labels(list_filenames, test_set):
     print("Loaded model from disk")
     
     labels = loaded_model.predict(test_set)
+    print labels[0]
     
 def convert_to_wav_test(folder):
     for (i,filename) in enumerate(os.listdir(folder)):
@@ -94,4 +95,4 @@ if __name__ == "__main__":
     test_set = normalize_data(test_set, min_cepstrum=min_cepstrum, max_cepstrum=max_cepstrum)
     test_set = get_same_length_data(test_set, maxlen)
     
-#    predict_labels(test_set)
+    predict_labels(test_set)
