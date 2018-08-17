@@ -26,6 +26,8 @@ from datetime import datetime
 from pyAudioAnalysis import audioBasicIO
 from pyAudioAnalysis import audioFeatureExtraction
 
+from utils import normalize_data, get_new_max_length, get_same_length_data
+
 N_FEATURES = 34
 win = 0.025
 step = 0.01
@@ -105,31 +107,6 @@ def extract_features(path_to_folder='.'):
     cPickle.dump([training_set, maxlen, max_cepstrum, min_cepstrum], open(train_pkl,'wb'), -1)
     return training_set, maxlen, max_cepstrum, min_cepstrum       
         
-def normalize_data(dataset, min_cepstrum, max_cepstrum):
-    diff = max_cepstrum - min_cepstrum
-    if isinstance(dataset[0], dict):
-        for data in dataset:
-            data['feature'] = (data['feature'] - min_cepstrum) / diff    #(x-min)/(max-min)
-    else:
-        for data in dataset:
-            data = (data - min_cepstrum) / diff    #(x-min)/(max-min)
-    return dataset
-
-def get_same_length_data(dataset, maxlen):
-    if isinstance(dataset[0], dict):
-        for data in dataset:
-            if data['feature'].shape[0] < maxlen:           #padding data
-                data['feature'] = np.pad(data['feature'], [(0,maxlen - len(data['feature'])),(0,0)], mode='constant', constant_values=0)
-            else:
-                data['feature'] = data['feature'][:maxlen]          #clip data
-    else:
-        for data in dataset:
-            if data.shape[0] < maxlen:           #padding data
-                data = np.pad(data, [(0,maxlen - len(data)),(0,0)], mode='constant', constant_values=0)
-            else:
-                data = data[:maxlen]          #clip data
-    return dataset
- 
 def split_data(training_set):
     train, test = train_test_split(training_set, test_size = 0.3, random_state=42)
     X_train = np.array([element['feature'] for element in train])
@@ -150,18 +127,23 @@ def model(training_set, maxlen, use_dropout = True):
     print 'Split data'
     print 'number of training set', len(X_train)
     print 'number of validation set', len(X_test)
-    inputs = Input(shape=(maxlen,13,))
-#    lstm1 = LSTM(16, return_sequences=True)(inputs)
-#    lstm1_flatten = Flatten()(lstm1)
-#    dense1 = Dense(32, activation='relu')(lstm1_flatten)
-    lstm1 = LSTM(32)(inputs)
-    dense1_gender = Dense(64, activation='relu')(lstm1)
-    dense2_gender = Dense(32, activation='relu')(dense1_gender)
-    output_gender = Dense(2, activation='softmax')(dense2_gender)
+    inputs = Input(shape=(maxlen,N_FEATURES,))
+    lstm1 = LSTM(16, return_sequences=True)(inputs)
+    lstm1_flatten = Flatten()(lstm1)
+    #lstm1 = LSTM(32)(inputs)
+    lstm1_drop = Dropout(0.5)(lstm1_flatten)
+    dense1_gender = Dense(256, activation='relu')(lstm1_drop)
+    dense2_gender = Dense(64, activation='relu')(dense1_gender)
+    dense2_gender_drop = Dropout(0.5)(dense2_gender)
+    dense3_gender = Dense(16, activation='relu')(dense2_gender_drop)
+    output_gender = Dense(2, activation='softmax')(dense3_gender)
     
-    dense1_accent = Dense(64, activation='relu')(lstm1)
-    dense2_accent = Dense(32, activation='relu')(dense1_accent)
-    output_accent = Dense(3, activation='softmax')(dense2_accent)
+    dense1_accent = Dense(256, activation='relu')(lstm1_drop)
+    dense2_accent = Dense(64, activation='relu')(dense1_accent)
+    dense2_accent_drop = Dropout(0.5)(dense2_accent)
+    dense3_accent = Dense(16, activation='relu')(dense2_accent_drop)
+    output_accent = Dense(3, activation='softmax')(dense3_accent)
+    
     model = Model(input=inputs, output=[output_gender, output_accent])
     model.compile(loss = 'categorical_crossentropy', optimizer='adam', metrics = ['accuracy'])
     
@@ -188,12 +170,6 @@ def model(training_set, maxlen, use_dropout = True):
     model.save_weights(model_name + ".h5")
     print("Saved model to disk")
     
-def get_new_max_length(dataset):
-    l = [data['feature'].shape[0] for data in dataset]
-    iqr = np.subtract(*np.percentile(l, [75, 25]))
-    maxlen = int(np.percentile(l, 75) + 1.5 * iqr)       #set new max length for audio since the longest is over 200K
-    return maxlen
-
 def test_model():
     X_test, Y_test_gender, Y_test_accent = cPickle.load(open('validation.pkl','rb'))
     print 'X_test', len(X_test)
@@ -216,18 +192,18 @@ def test_model():
 if __name__ == "__main__":
     #convert_to_wav(path)
      training_set, maxlen, max_cepstrum, min_cepstrum = extract_features(path)
-#     print 'number of training samples', len(training_set)
-# #    print maxlen
-# #    print max_cepstrum
-# #    print min_cepstrum
-#     training_set = normalize_data(training_set, min_cepstrum=min_cepstrum, max_cepstrum=max_cepstrum)
-#     maxlen = get_new_max_length(training_set)
-#     print 'new max length for padding', maxlen
-#     training_set = get_same_length_data(training_set, maxlen=maxlen)
+     print 'number of training samples', len(training_set)
+ #    print maxlen
+ #    print max_cepstrum
+ #    print min_cepstrum
+     training_set = normalize_data(training_set, min_cepstrum=min_cepstrum, max_cepstrum=max_cepstrum)
+     maxlen = get_new_max_length(training_set)
+     print 'new max length for padding', maxlen
+     training_set = get_same_length_data(training_set, maxlen=maxlen)
     
 # #    for data in training_set:
 # #        assert data['feature'].shape[0] == maxlen
-#     model(training_set, maxlen)
+     model(training_set, maxlen)
 #    test_model()
     #print training_set[0:2]['gender']
 

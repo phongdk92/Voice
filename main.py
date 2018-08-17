@@ -24,6 +24,8 @@ from keras.preprocessing.sequence import pad_sequences
 from sklearn.model_selection import train_test_split
 from datetime import datetime
 
+from utils import get_new_max_length, get_same_length_data, normalize_data
+
 path = 'train'
 if not os.path.exists('model'):
     os.mkdir('model')
@@ -102,31 +104,6 @@ def get_mfcc_feature(path_to_folder='.'):
     cPickle.dump([training_set, maxlen, max_cepstrum, min_cepstrum], open(train_pkl,'wb'), -1)
     return training_set, maxlen, max_cepstrum, min_cepstrum       
         
-def normalize_data(dataset, min_cepstrum, max_cepstrum):
-    diff = max_cepstrum - min_cepstrum
-    if isinstance(dataset[0], dict):
-        for data in dataset:
-            data['feature'] = (data['feature'] - min_cepstrum) / diff    #(x-min)/(max-min)
-    else:
-        for data in dataset:
-            data = (data - min_cepstrum) / diff    #(x-min)/(max-min)
-    return dataset
-
-def get_same_length_data(dataset, maxlen):
-    if isinstance(dataset[0], dict):
-        for data in dataset:
-            if data['feature'].shape[0] < maxlen:           #padding data
-                data['feature'] = np.pad(data['feature'], [(0,maxlen - len(data['feature'])),(0,0)], mode='constant', constant_values=0)
-            else:
-                data['feature'] = data['feature'][:maxlen]          #clip data
-    else:
-        for data in dataset:
-            if data.shape[0] < maxlen:           #padding data
-                data = np.pad(data, [(0,maxlen - len(data)),(0,0)], mode='constant', constant_values=0)
-            else:
-                data = data[:maxlen]          #clip data
-    return dataset
- 
 def split_data(training_set):
     train, test = train_test_split(training_set, test_size = 0.3, random_state=42)
     X_train = np.array([element['feature'] for element in train])
@@ -185,12 +162,6 @@ def model(training_set, maxlen, use_dropout = True):
     model.save_weights(model_name + ".h5")
     print("Saved model to disk")
     
-def get_new_max_length(dataset):
-    l = [data['feature'].shape[0] for data in dataset]
-    iqr = np.subtract(*np.percentile(l, [75, 25]))
-    maxlen = int(np.percentile(l, 75) + 1.5 * iqr)       #set new max length for audio since the longest is over 200K
-    return maxlen
-
 def test_model():
     X_test, Y_test_gender, Y_test_accent = cPickle.load(open('validation.pkl','rb'))
     print 'X_test', len(X_test)

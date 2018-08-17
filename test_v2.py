@@ -1,9 +1,9 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 """
-Created on Mon Aug 13 16:12:30 2018
+Created on Fri Aug 17 09:57:43 2018
 
-@author: phongdo
+@author: phongdk
 """
 
 '''test'''
@@ -19,14 +19,18 @@ from keras.models import Sequential, Model, model_from_json
 from keras.layers import Dense, Activation, LSTM, Dropout, Input, Flatten, InputLayer 
 from keras.preprocessing.sequence import pad_sequences
 import cPickle
-import pandas as pd
+from pyAudioAnalysis import audioBasicIO
+from pyAudioAnalysis import audioFeatureExtraction
 
-from utils import get_new_max_length, get_same_length_data, normalize_data
-model_name = 'model/2018_08_16_09_14'
+from main import normalize_data, get_same_length_data, get_new_max_length
 
-def get_mfcc_feature(path):
+win = 0.025
+step = 0.01
+model_name = 'model_2018_08_15_17_22'
+
+def extract_features(path):
     print 'extract feature of test set'
-    test_pkl = 'test.pkl'
+    test_pkl = 'test34.pkl'
     if os.path.isfile(test_pkl):
         [test_set, list_filenames] = cPickle.load(open(test_pkl, 'rb'))
         return test_set, list_filenames
@@ -34,23 +38,21 @@ def get_mfcc_feature(path):
     list_filenames = sorted(os.listdir(path))
     for filename in list_filenames:
         path_to_file = os.path.join(path,filename)
-        if not filename.endswith('wav'):
+        [rate,sig] = audioBasicIO.readAudioFile(path_to_file)
+        if (rate == -1 and sig == -1):
             #convert to wav
-            command = "ffmpeg -i {}".format(path_to_file)
+            #command = "ffmpeg -i {}".format(path_to_file)
             extension = os.path.splitext(filename)[-1]
             new_file = path_to_file.replace(extension, '.wav')
             command = "ffmpeg -i {} {}".format(path_to_file, new_file)
             os.system(command)
-            #command = "ffmpeg -i {}".format(new_file)
-            #print commands.getoutput(command)
-            
-            (rate,sig) = wav.read(new_file)
-            os.system('rm {}'.format(new_file))     #remove new *.wav file
-        else:
-            (rate,sig) = wav.read(path_to_file)
-             
-        mfcc_feat = mfcc(sig,rate, nfft = 2048)
-        test_set.append(mfcc_feat)
+            [rate,sig] = audioBasicIO.readAudioFile(new_file)
+            os.system('rm {}'.format(path_to_file))     #remove old file not in *.wav format
+        if sig.ndim >= 2:           #merge multichannels into mono channel
+            sig = np.mean(sig,axis=1)
+        features = audioFeatureExtraction.stFeatureExtraction(sig, rate, win*rate, step*rate);
+        features = features.reshape((features.shape[1],-1))
+        test_set.append(features)
     cPickle.dump([test_set, list_filenames], open(test_pkl, 'wb'), -1)
     return test_set, list_filenames
 
@@ -78,33 +80,22 @@ def predict_labels(test_set):
     accent = np.argmax(labels[1], axis=1)
     #print gender
     #print accent
-    return gender, accent    
-    
-def convert_to_wav_test(folder):
-    for (i,filename) in enumerate(os.listdir(folder)):
-        print i
-        path_to_file = os.path.join(folder,filename)
-        if not filename.endswith('wav'):
-            #convert to wav
-            command = "ffmpeg -i {}".format(path_to_file)
-            extension = os.path.splitext(filename)[-1]
-            new_file = path_to_file.replace(extension, '.wav')
-            command = "ffmpeg -i {} {}".format(path_to_file, new_file)
-            os.system(command)
-            os.system('rm {}'.format(path_to_file))     #remove old file not in *.wav format    
+    return gender, accent   
+ 
             
 if __name__ == "__main__":
     path_to_public_test = sys.argv[1]
     if ".zip" in path_to_public_test:
-        #os.system("unzip {}".format(path_to_public_test))
+        os.system("unzip {}".format(path_to_public_test))
         path_to_public_test = path_to_public_test.replace(".zip", "")
     #convert_to_wav_test(path_to_public_test)
-    train_pkl = 'train_wav/train.pkl'
+    train_pkl = 'train/train34.pkl'
     [training_set, maxlen, max_cepstrum, min_cepstrum] = cPickle.load(open(train_pkl, 'rb'))
+    print maxlen
     maxlen = get_new_max_length(training_set)
     print maxlen
     
-    test_set, list_filenames = get_mfcc_feature(path_to_public_test)
+    test_set, list_filenames = extract_features(path_to_public_test)
     print len(test_set)
     test_set = normalize_data(test_set, min_cepstrum=min_cepstrum, max_cepstrum=max_cepstrum)
     test_set = get_same_length_data(test_set, maxlen)
@@ -113,23 +104,3 @@ if __name__ == "__main__":
     df = pd.DataFrame({'id':list_filenames, 'gender':gender,'accent':accent}) 
     df.set_index('id', inplace=True)
     df.to_csv("submission.csv")
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
