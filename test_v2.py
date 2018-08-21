@@ -21,12 +21,13 @@ from keras.preprocessing.sequence import pad_sequences
 import cPickle
 from pyAudioAnalysis import audioBasicIO
 from pyAudioAnalysis import audioFeatureExtraction
+import pandas as pd
 
-from main import normalize_data, get_same_length_data, get_new_max_length
+from utils import normalize_data, get_same_length_data, get_new_max_length
 
 win = 0.025
 step = 0.01
-model_name = 'model_2018_08_15_17_22'
+#model_name = 'model/2018_08_17_17_20'
 
 def extract_features(path):
     print 'extract feature of test set'
@@ -78,6 +79,7 @@ def predict_labels(test_set):
     
     gender = np.argmax(labels[0], axis=1)
     accent = np.argmax(labels[1], axis=1)
+    print labels[1][0:5]
     #print gender
     #print accent
     return gender, accent   
@@ -85,6 +87,7 @@ def predict_labels(test_set):
             
 if __name__ == "__main__":
     path_to_public_test = sys.argv[1]
+    model_name = sys.argv[2]
     if ".zip" in path_to_public_test:
         os.system("unzip {}".format(path_to_public_test))
         path_to_public_test = path_to_public_test.replace(".zip", "")
@@ -96,9 +99,16 @@ if __name__ == "__main__":
     print maxlen
     
     test_set, list_filenames = extract_features(path_to_public_test)
-    print len(test_set)
+#    print min_cepstrum
+#    print max_cepstrum
+#    print len(test_set)
+#    print test_set[10]
     test_set = normalize_data(test_set, min_cepstrum=min_cepstrum, max_cepstrum=max_cepstrum)
     test_set = get_same_length_data(test_set, maxlen)
+    for element in test_set:
+        assert element.shape[0] == maxlen
+#    print test_set[10].shape
+#    print test_set[10]
     gender, accent = predict_labels(test_set)
     #create new df 
     df = pd.DataFrame({'id':list_filenames, 'gender':gender,'accent':accent}) 

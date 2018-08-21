@@ -18,8 +18,9 @@ import sys
 import cPickle
 import keras as K
 from keras.models import Sequential, Model, model_from_json
-from keras.layers import Dense, Activation, LSTM, Dropout, Input, Flatten, InputLayer 
+from keras.layers import Dense, Activation, LSTM, Dropout, Input, Flatten, InputLayer, Bidirectional 
 from keras.preprocessing.sequence import pad_sequences
+from keras.callbacks import EarlyStopping
 
 from sklearn.model_selection import train_test_split
 from datetime import datetime
@@ -35,8 +36,8 @@ step = 0.01
 path = 'train'
 if not os.path.exists('model'):
     os.mkdir('model')
-#model_name= 'model/' + datetime.strftime(datetime.now(), "%Y_%m_%d_%H_%M")
-model_name = 'model/2018_08_16_09_14'
+model_name= 'model/' + datetime.strftime(datetime.now(), "%Y_%m_%d_%H_%M")
+#model_name = 'model/2018_08_16_09_14'
 
 def extract_features(path_to_folder='.'):
     print 'extract_features'
@@ -128,20 +129,21 @@ def model(training_set, maxlen, use_dropout = True):
     print 'number of training set', len(X_train)
     print 'number of validation set', len(X_test)
     inputs = Input(shape=(maxlen,N_FEATURES,))
-    lstm1 = LSTM(16, return_sequences=True)(inputs)
+    #lstm1 = LSTM(16, return_sequences=True)(inputs)
+    lstm1 = Bidirectional(LSTM(16, return_sequences=True)(inputs), merge_mode='concat')
     lstm1_flatten = Flatten()(lstm1)
-    #lstm1 = LSTM(32)(inputs)
+    #lstm1 = LSTM(1024)(inputs)
     lstm1_drop = Dropout(0.5)(lstm1_flatten)
     dense1_gender = Dense(256, activation='relu')(lstm1_drop)
     dense2_gender = Dense(64, activation='relu')(dense1_gender)
-    dense2_gender_drop = Dropout(0.5)(dense2_gender)
-    dense3_gender = Dense(16, activation='relu')(dense2_gender_drop)
-    output_gender = Dense(2, activation='softmax')(dense3_gender)
+    #dense2_gender_drop = Dropout(0.5)(dense2_gender)
+    #dense3_gender = Dense(16, activation='relu')(dense2_gender_drop)
+    output_gender = Dense(2, activation='softmax')(dense2_gender)
     
     dense1_accent = Dense(256, activation='relu')(lstm1_drop)
     dense2_accent = Dense(64, activation='relu')(dense1_accent)
-    dense2_accent_drop = Dropout(0.5)(dense2_accent)
-    dense3_accent = Dense(16, activation='relu')(dense2_accent_drop)
+    #dense2_accent_drop = Dropout(0.5)(dense2_accent)
+    dense3_accent = Dense(16, activation='relu')(dense2_accent)
     output_accent = Dense(3, activation='softmax')(dense3_accent)
     
     model = Model(input=inputs, output=[output_gender, output_accent])
@@ -156,11 +158,14 @@ def model(training_set, maxlen, use_dropout = True):
 #    model.add(Dense(2,activation='softmax'))
 #    model.compile(loss = 'categorical_crossentropy', optimizer='adam',metrics = ['accuracy'])
     print(model.summary())
-    
+    # define early stopping callback
+    earlystop = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=5, \
+                              verbose=1, mode='auto')
+    callbacks_list = [earlystop]
     
     #model.fit(X_train, Y_train_gender, batch_size=10, verbose=1, epochs=3)
-    model.fit(X_train, [Y_train_gender, Y_train_accent], validation_data=(X_test, [Y_test_gender, Y_test_accent]), \
-              batch_size=128, verbose=1, epochs=1)
+    model_info = model.fit(X_train, [Y_train_gender, Y_train_accent], validation_data=(X_test, [Y_test_gender, Y_test_accent]), \
+              batch_size=128, verbose=2, callbacks=callbacks_list, epochs=1000)
 
     # serialize model to JSON
     model_json = model.to_json()
@@ -185,26 +190,28 @@ def test_model():
     # print gender_pred
     # print accent_pred
     loaded_model.compile(loss = 'categorical_crossentropy', optimizer='adam', metrics = ['accuracy'])
-    acc = loaded_model.evaluate(X_test, [Y_test_gender, Y_test_accent], batch_size=128)
+    scores = loaded_model.evaluate(X_test, [Y_test_gender, Y_test_accent])
+    print("%s: %.2f%%" % (model.metrics_names[1], scores[1]*100))
     #print('Test score:', score)
-    print('Test accuracy:', acc)
+    #print('Test accuracy:', acc)
     
 if __name__ == "__main__":
     #convert_to_wav(path)
-     training_set, maxlen, max_cepstrum, min_cepstrum = extract_features(path)
-     print 'number of training samples', len(training_set)
+    training_set, maxlen, max_cepstrum, min_cepstrum = extract_features(path)
+    print 'number of training samples', len(training_set)
  #    print maxlen
  #    print max_cepstrum
  #    print min_cepstrum
-     training_set = normalize_data(training_set, min_cepstrum=min_cepstrum, max_cepstrum=max_cepstrum)
-     maxlen = get_new_max_length(training_set)
-     print 'new max length for padding', maxlen
-     training_set = get_same_length_data(training_set, maxlen=maxlen)
+    training_set = normalize_data(training_set, min_cepstrum=min_cepstrum, max_cepstrum=max_cepstrum)
+    maxlen = get_new_max_length(training_set)
+    print 'new max length for padding', maxlen
+    training_set = get_same_length_data(training_set, maxlen=maxlen)
     
+    print training_set[10]
 # #    for data in training_set:
 # #        assert data['feature'].shape[0] == maxlen
-     model(training_set, maxlen)
-#    test_model()
+    #model(training_set, maxlen)
+    test_model()
     #print training_set[0:2]['gender']
 
 
